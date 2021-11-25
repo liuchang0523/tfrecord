@@ -61,29 +61,43 @@ def tfrecord_iterator(
             file.seek(start_offset)
         if end_offset is None:
             end_offset = os.path.getsize(data_path)
-        while file.tell() < end_offset:
-            if file.readinto(length_bytes) != 8:
-                raise RuntimeError("Failed to read the record size.")
-            if file.readinto(crc_bytes) != 4:
-                raise RuntimeError("Failed to read the start token.")
-            length, = struct.unpack("<Q", length_bytes)
-            if length > len(datum_bytes):
-                datum_bytes = datum_bytes.zfill(int(length * 1.5))
-            datum_bytes_view = memoryview(datum_bytes)[:length]
-            if file.readinto(datum_bytes_view) != length:
-                raise RuntimeError("Failed to read the record.")
-            if file.readinto(crc_bytes) != 4:
-                raise RuntimeError("Failed to read the end token.")
-            yield datum_bytes_view
+        if index_path is None:
+            while file.tell() < end_offset:
+                datum_bytes_view = extrate()
+                yield datum_bytes_view
+        else:
+            indexs = np.loadtxt(index_path, dtype=np.int64, usecols=(0))
+            for start in indexs:
+                file.seek(start)
+                datum_bytes_view = extrate()
+                yield datum_bytes_view
+
+    def extrate():
+        nonlocal length_bytes, crc_bytes, datum_bytes
+
+        if file.readinto(length_bytes) != 8:
+            raise RuntimeError("Failed to read the record size.")
+        if file.readinto(crc_bytes) != 4:
+            raise RuntimeError("Failed to read the start token.")
+        length, = struct.unpack("<Q", length_bytes)
+        if length > len(datum_bytes):
+            datum_bytes = datum_bytes.zfill(int(length * 1.5))
+        datum_bytes_view = memoryview(datum_bytes)[:length]
+        if file.readinto(datum_bytes_view) != length:
+            raise RuntimeError("Failed to read the record.")
+        if file.readinto(crc_bytes) != 4:
+            raise RuntimeError("Failed to read the end token.")
+        return datum_bytes_view
+
 
     if index_path is None:
         yield from read_records()
     else:
-        index = np.loadtxt(index_path, dtype=np.int64)[:, 0]
+        index = np.loadtxt(index_path, dtype=np.int64, usecols=(0))
         if shard is None:
             offset = np.random.choice(index)
             yield from read_records(offset)
-            yield from read_records(0, offset)
+            # yield from read_records(0, offset)
         else:
             num_records = len(index)
             shard_idx, shard_count = shard
