@@ -67,7 +67,9 @@ def tfrecord_iterator(
                 yield datum_bytes_view
         else:
             indexs = np.loadtxt(index_path, dtype=np.int64, usecols=(0))
-            for start in indexs:
+            start_offset = 0 if start_offset is None else start_offset
+            end_offset = len(indexs) if end_offset > len(indexs) else end_offset
+            for start in indexs[start_offset:end_offset]:
                 file.seek(start)
                 datum_bytes_view = extrate()
                 yield datum_bytes_view
@@ -95,17 +97,14 @@ def tfrecord_iterator(
     else:
         index = np.loadtxt(index_path, dtype=np.int64, usecols=(0))
         if shard is None:
-            offset = np.random.choice(index)
-            yield from read_records(offset)
-            # yield from read_records(0, offset)
+            yield from read_records(0)
         else:
             num_records = len(index)
             shard_idx, shard_count = shard
             start_index = (num_records * shard_idx) // shard_count
             end_index = (num_records * (shard_idx + 1)) // shard_count
-            start_byte = index[start_index]
-            end_byte = index[end_index] if end_index < num_records else None
-            yield from read_records(start_byte, end_byte)
+            end_index = end_index if end_index < num_records else None
+            yield from read_records(start_index, end_index)
 
     file.close()
 
