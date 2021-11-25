@@ -4,7 +4,7 @@ This library allows reading and writing tfrecord files efficiently in python. Th
 
 ## Installation
 
-```pip3 install tfrecord```
+```pip install git+https://github.com/liuchang0523/tfrecord.git@master```
 
 ## Usage
 
@@ -68,7 +68,7 @@ dataset = TFRecordDataset(..., shuffle_queue_size=1024)
 
 You can optionally pass a function as `transform` argument to perform post processing of features before returning. 
 This can for example be used to decode images or normalize colors to a certain range or pad variable length sequence.
- 
+
 ```python
 import tfrecord
 import cv2
