@@ -2,11 +2,83 @@
 
 import typing
 import numpy as np
+import gzip
+import io
+import struct
 
 import torch.utils.data
 
 from tfrecord import reader
+from tfrecord import example_pb2
 from tfrecord import iterator_utils
+
+
+class TFRecordIO(object):
+    def __init__(self,
+                 data_path,
+                 index_path,
+                 description,
+                 transform=None,
+                 compression_type=None) -> None:
+        super().__init__()
+
+        if compression_type == "gzip":
+            self.file = gzip.open(data_path, "rb")
+        elif compression_type is None:
+            self.file = io.open(data_path, "rb")
+        else:
+            raise ValueError(
+                "compression_type should be either 'gzip' or None")
+        self.indexs = np.loadtxt(index_path, dtype=np.int64, usecols=(0))
+        self.length_bytes = bytearray(8)
+        self.crc_bytes = bytearray(4)
+        self.datum_bytes = bytearray(1024 * 1024)
+
+        self.description = description
+
+        self.typename_mapping = {
+            "byte": "bytes_list",
+            "float": "float_list",
+            "int": "int64_list"
+        }
+
+        self.transform = transform or (lambda x: x)
+
+    def __getitem__(self, index):
+        pos = self.indexs[index]
+        self.file.seek(pos)
+        datum_bytes_view = self.extrate()
+
+        example = example_pb2.Example()
+        example.ParseFromString(datum_bytes_view)
+        context = reader.extract_feature_dict(example.features,
+                                              self.description,
+                                              self.typename_mapping)
+
+        if self.transform:
+            context = self.transform(context)
+        return context
+
+    def extrate(self):
+        if self.file.readinto(self.length_bytes) != 8:
+            raise RuntimeError("Failed to read the record size.")
+        if self.file.readinto(self.crc_bytes) != 4:
+            raise RuntimeError("Failed to read the start token.")
+        length, = struct.unpack("<Q", self.length_bytes)
+        if length > len(self.datum_bytes):
+            self.datum_bytes = self.datum_bytes.zfill(int(length * 1.5))
+        datum_bytes_view = memoryview(self.datum_bytes)[:length]
+        if self.file.readinto(datum_bytes_view) != length:
+            raise RuntimeError("Failed to read the record.")
+        if self.file.readinto(self.crc_bytes) != 4:
+            raise RuntimeError("Failed to read the end token.")
+        return datum_bytes_view
+
+    def __del__(self):
+        self.file.close()
+
+    def __len__(self):
+        return len(self.indexs)
 
 
 class TFRecordDataset(torch.utils.data.IterableDataset):
@@ -135,7 +207,7 @@ class MultiTFRecordDataset(torch.utils.data.IterableDataset):
     compression_type: str, optional, default=None
         The type of compression used for the tfrecord. Choose either
         'gzip' or None.
-    
+
     infinite: bool, optional, default=True
         Whether the Dataset should be infinite or not
     """
@@ -177,7 +249,7 @@ class MultiTFRecordDataset(torch.utils.data.IterableDataset):
                                           sequence_description=self.sequence_description,
                                           compression_type=self.compression_type,
                                           infinite=self.infinite,
-                                         )
+                                          )
         if self.shuffle_queue_size:
             it = iterator_utils.shuffle_iterator(it, self.shuffle_queue_size)
         if self.transform:
