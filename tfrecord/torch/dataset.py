@@ -2,7 +2,6 @@
 
 import typing
 import numpy as np
-import gzip
 import io
 import struct
 
@@ -18,17 +17,10 @@ class TFRecordIO(object):
                  data_path,
                  index_path,
                  description,
-                 transform=None,
-                 compression_type=None) -> None:
-        super().__init__()
+                 transform=None) -> None:
+        super(TFRecordIO, self).__init__()
 
-        if compression_type == "gzip":
-            self.file = gzip.open(data_path, "rb")
-        elif compression_type is None:
-            self.file = io.open(data_path, "rb")
-        else:
-            raise ValueError(
-                "compression_type should be either 'gzip' or None")
+        self.file = io.open(data_path, "rb")
         self.indexs = np.loadtxt(index_path, dtype=np.int64, usecols=(0))
         self.length_bytes = bytearray(8)
         self.crc_bytes = bytearray(4)
