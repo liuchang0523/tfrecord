@@ -57,8 +57,9 @@ def sample_iterators(iterators: typing.List[typing.Iterator],
         except StopIteration:
             if iterators:
                 del iterators[choice]
-                ratios = np.delete(ratios, choice)
-                ratios = ratios / ratios.sum()
+                if split:
+                    ratios = np.delete(ratios, choice)
+                    ratios = ratios / ratios.sum()
 
 
 def shuffle_iterator(iterator: typing.Iterator,
