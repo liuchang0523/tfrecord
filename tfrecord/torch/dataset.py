@@ -59,9 +59,6 @@ class TFRecordIO(object):
             file.readinto(datum_bytes_view)
         return datum_bytes_view
 
-    def __del__(self):
-        self.file.close()
-
     def __len__(self):
         return len(self.indexs)
 
