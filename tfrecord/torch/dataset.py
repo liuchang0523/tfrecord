@@ -2,7 +2,6 @@
 
 import typing
 import numpy as np
-import io
 import struct
 
 import torch.utils.data
@@ -20,10 +19,8 @@ class TFRecordIO(object):
                  transform=None) -> None:
         super(TFRecordIO, self).__init__()
 
-        self.file = io.open(data_path, "rb")
+        self.file_path = data_path
         self.indexs = np.loadtxt(index_path, dtype=np.int64, usecols=(0))
-        self.length_bytes = bytearray(8)
-        self.crc_bytes = bytearray(4)
         self.datum_bytes = bytearray(1024 * 1024)
 
         self.description = description
@@ -38,8 +35,7 @@ class TFRecordIO(object):
 
     def __getitem__(self, index):
         pos = self.indexs[index]
-        self.file.seek(pos)
-        datum_bytes_view = self.extrate()
+        datum_bytes_view = self._extrate(self.file_path, pos)
 
         example = example_pb2.Example()
         example.ParseFromString(datum_bytes_view)
@@ -51,19 +47,16 @@ class TFRecordIO(object):
             context = self.transform(context)
         return context
 
-    def extrate(self):
-        if self.file.readinto(self.length_bytes) != 8:
-            raise RuntimeError("Failed to read the record size.")
-        if self.file.readinto(self.crc_bytes) != 4:
-            raise RuntimeError("Failed to read the start token.")
-        length, = struct.unpack("<Q", self.length_bytes)
-        if length > len(self.datum_bytes):
-            self.datum_bytes = self.datum_bytes.zfill(int(length * 1.5))
-        datum_bytes_view = memoryview(self.datum_bytes)[:length]
-        if self.file.readinto(datum_bytes_view) != length:
-            raise RuntimeError("Failed to read the record.")
-        if self.file.readinto(self.crc_bytes) != 4:
-            raise RuntimeError("Failed to read the end token.")
+    def _extrate(self, file_path, offset):
+        with open(file_path, 'rb') as file:
+            file.seek(offset)
+            byte_len_crc = file.read(12)
+            length = struct.unpack('<Q', byte_len_crc[:8])[0]
+            if length > len(self.datum_bytes):
+                self.datum_bytes = self.datum_bytes.zfill(int(length * 1.5))
+                print("too long")
+            datum_bytes_view = memoryview(self.datum_bytes)[:length]
+            file.readinto(datum_bytes_view)
         return datum_bytes_view
 
     def __del__(self):
