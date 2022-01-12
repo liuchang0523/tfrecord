@@ -4,7 +4,7 @@ This library allows reading and writing tfrecord files efficiently in python. Th
 
 ## Installation
 
-```pip install git+https://github.com/liuchang0523/tfrecord.git@master```
+```pip install --upgrade --no-deps --force-reinstall git+https://github.com/liuchang0523/tfrecord.git@master```
 
 ## Usage
 
