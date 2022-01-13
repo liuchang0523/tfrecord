@@ -1,11 +1,13 @@
 """Load tfrecord files into torch datasets."""
 
 import typing
-import numpy as np
 import struct
+import mmap
+import os
 
 import torch.utils.data
 
+import numpy as np
 from tfrecord import reader
 from tfrecord import example_pb2
 from tfrecord import iterator_utils
@@ -19,9 +21,10 @@ class TFRecordIO(object):
                  transform=None) -> None:
         super(TFRecordIO, self).__init__()
 
-        self.file_path = data_path
+        fd = os.open(data_path, os.O_RDONLY)
+        self.file = mmap.mmap(fd, 0, access=mmap.ACCESS_READ)
+
         self.indexs = np.loadtxt(index_path, dtype=np.int64, usecols=(0))
-        self.datum_bytes = bytearray(1024 * 1024)
 
         self.description = description
 
@@ -35,10 +38,10 @@ class TFRecordIO(object):
 
     def __getitem__(self, index):
         pos = self.indexs[index]
-        datum_bytes_view = self._extrate(self.file_path, pos)
+        data_bytes = self._extrate(pos)
 
         example = example_pb2.Example()
-        example.ParseFromString(datum_bytes_view)
+        example.ParseFromString(data_bytes)
         context = reader.extract_feature_dict(example.features,
                                               self.description,
                                               self.typename_mapping)
@@ -47,17 +50,16 @@ class TFRecordIO(object):
             context = self.transform(context)
         return context
 
-    def _extrate(self, file_path, offset):
-        with open(file_path, 'rb') as file:
-            file.seek(offset)
-            byte_len_crc = file.read(12)
-            length = struct.unpack('<Q', byte_len_crc[:8])[0]
-            if length > len(self.datum_bytes):
-                self.datum_bytes = self.datum_bytes.zfill(int(length * 1.5))
-                print("too long")
-            datum_bytes_view = memoryview(self.datum_bytes)[:length]
-            file.readinto(datum_bytes_view)
-        return datum_bytes_view
+    def _extrate(self, offset):
+        self.file.seek(offset)
+        byte_len_crc = self.file.read(12)
+        length = struct.unpack('<Q', byte_len_crc[:8])[0]
+        data_bytes = self.file.read(length)
+        return data_bytes
+    
+    def __del__(self):
+        if self.file:
+            self.file.close()
 
     def __len__(self):
         return len(self.indexs)
