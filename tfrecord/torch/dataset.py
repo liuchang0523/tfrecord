@@ -24,7 +24,10 @@ class TFRecordIO(object):
         fd = os.open(data_path, os.O_RDONLY)
         self.file = mmap.mmap(fd, 0, access=mmap.ACCESS_READ)
 
-        self.indexs = np.loadtxt(index_path, dtype=np.int64, usecols=(0))
+        if index_path is not None:
+            self.indexs = np.loadtxt(index_path, dtype=np.int64, usecols=(0))
+        else:
+            self.indexs = None
 
         self.description = description
 
@@ -35,6 +38,9 @@ class TFRecordIO(object):
         }
 
         self.transform = transform or (lambda x: x)
+
+    def set_indexs(self, index_path):
+        self.indexs = np.loadtxt(index_path, dtype=np.int64, usecols=(0))
 
     def __getitem__(self, index):
         pos = self.indexs[index]
